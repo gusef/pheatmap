@@ -129,7 +129,17 @@ lo = function(rown,
     }    
     
     # Produce gtable
-    gt = gtable(widths = unit.c(treeheight_row, annot_row_width, mat_width, rown_width, legend_width, annot_legend_width), heights = unit.c(main_height, treeheight_col, annot_col_height, mat_height, coln_height), vp = viewport(gp = do.call(gpar, gp)))
+    gt = gtable(widths = unit.c(treeheight_row, 
+                                annot_row_width, 
+                                mat_width, 
+                                rown_width, 
+                                legend_width, 
+                                annot_legend_width), 
+                heights = unit.c(main_height, 
+                                 treeheight_col, 
+                                 annot_col_height, 
+                                 mat_height, 
+                                 coln_height), vp = viewport(gp = do.call(gpar, gp)))
     
     cw = convertWidth(mat_width - (length(gaps_col) * unit(4, "bigpts")), "bigpts", valueOnly = T) / ncol
     ch = convertHeight(mat_height - (length(gaps_row) * unit(4, "bigpts")), "bigpts", valueOnly = T) / nrow
@@ -209,27 +219,25 @@ draw_dendrogram = function(hc, gaps, horizontal = T){
     return(res)
 }
 
-draw_barplot = function(bars, gaps, barplot_color){
+draw_barplot = function(bars, gaps, barplot_color, border_color, barplot_lim){
 
-   coord = find_coordinates(length(bars), gaps)
-   coord_x = coord$coord - 0.5 * coord$size
-   coord_y = unit(0, "npc")   
-   
+    rnge <- range(bars)
+    lim <- barplot_lim[2] - barplot_lim[1]
+    bars <- bars * 0.9 / lim
 
-   range <- (bars)
-   
-   
-   res = gList()
-   
-   res[["rect"]] = rectGrob(x = coord_x$x, 
-                            y = coord_y, 
-                            width = coord$size, 
-                            height = coord_y$size, 
-                            gp = gpar(fill = barplot_color, col = border_color))
-   
-   res = gTree(children = res)
-   
-   return(res)
+    coord = find_coordinates(length(bars), gaps)
+    coord_x = coord$coord - 0.5 * coord$size
+    coord_y = rep(unit(0.05 - (barplot_lim[1] * 0.9 / lim),  "npc"), length(coord_x))   
+      
+    res = gList()
+    res[["rect"]] = rectGrob(x = coord_x, 
+                             y = coord_y,
+                             just = 'bottom',
+                             width = coord$size, 
+                             height = unit(bars, "npc"), 
+                             gp = gpar(fill = barplot_color, col = border_color))
+    res = gTree(children = res)
+    return(res)
 }
 
 
@@ -277,9 +285,19 @@ draw_rownames = function(rown, gaps, ...){
 }
 
 draw_legend = function(color, breaks, legend, ...){
+   
+    # if (class(color) != 'list'){
+    #    color <- list(color = color)
+    # }
+
+   if (class(color) == 'list'){
+      color <- color[[1]]$color
+      
+   }
+
     height = min(unit(1, "npc"), unit(150, "bigpts"))
-    
-    legend_pos = (legend - min(breaks)) / (max(breaks) - min(breaks))
+
+    legend_pos = ((legend - min(breaks)) / (max(breaks) - min(breaks)))
     legend_pos = height * legend_pos + (unit(1, "npc") - height)
     
     breaks = (breaks - min(breaks)) / (max(breaks) - min(breaks))
@@ -287,10 +305,47 @@ draw_legend = function(color, breaks, legend, ...){
     
     h = breaks[-1] - breaks[-length(breaks)]
     
-    rect = rectGrob(x = 0, y = breaks[-length(breaks)], width = unit(10, "bigpts"), height = h, hjust = 0, vjust = 0, gp = gpar(fill = color, col = "#FFFFFF00"))
-    text = textGrob(names(legend), x = unit(14, "bigpts"), y = legend_pos, hjust = 0, gp = gpar(...))
-    
+    rect = rectGrob(x = 0, y = breaks[-length(breaks)] * 0.9, width = unit(10, "bigpts"), height = h, hjust = 0, vjust = 0, gp = gpar(fill = color, col = "#FFFFFF00"))
+    text = textGrob(names(legend), x = unit(14, "bigpts"), y = legend_pos * 0.9, hjust = 0, gp = gpar(...))
     res = grobTree(rect, text)
+    
+    return(res)
+}
+
+draw_barplot_axis = function(bars, barplot_label, ...){
+    
+    height = min(unit(1, "npc"), unit(150, "bigpts"))
+    
+    legend <- grid.pretty(range(as.vector(bars)))
+    legend_pos = ((legend - min(bars)) / (max(bars) - min(bars)))
+    legend_pos = unit(legend_pos, "npc") 
+    
+    bars = (bars - min(bars)) / (max(bars) - min(bars))
+    bars = unit(bars, "npc") 
+    h = bars[-1] - bars[-length(bars)]
+
+    text = textGrob(legend, x = unit(0.15, "npc"), just = 'left', y = legend_pos, gp = gpar(...))
+    
+    ticks = polylineGrob(x = c(rep(unit(0.02, "npc"),length(legend_pos)),
+                               rep(unit(0.08, "npc"),length(legend_pos))), 
+                         y = rep(legend_pos,2), 
+                         id = rep(1:length(legend_pos),2))
+    axis = linesGrob(x = unit(c(0.02, 0.02), "npc"),
+                     y = unit(c(legend_pos[1],legend_pos[length(legend_pos)]), "npc"))
+    
+    if (!is.na(barplot_label)){
+       label = textGrob(barplot_label,
+                        x = unit(0.6, "npc"), 
+                        y = unit(0.5, "npc"), 
+                        rot = 90, 
+                        just = 'center', 
+                        gp = gpar(fontface='bold',...))
+       res = grobTree(text, ticks, axis, label)
+    } else {
+       res = grobTree(text, ticks, axis)
+    }
+    
+    
     
     return(res)
 }
@@ -447,6 +502,10 @@ heatmap_motor = function(matrix,
                          labels_row, 
                          labels_col, 
                          barplot_color,
+                         barplot_lim,
+                         barplot_label,
+                         barplot_legend = barplot_legend,
+                         barplot_legend_title = barplot_legend_title,
                          ...){
     # Set layout
     lo = lo(coln = labels_col, 
@@ -469,9 +528,11 @@ heatmap_motor = function(matrix,
             fontsize_row = fontsize_row, 
             fontsize_col = fontsize_col, 
             gaps_row = gaps_row, 
-            gaps_col = gaps_col,  ...)
+            gaps_col = gaps_col,  
+            ...)
+
+        res = lo$gt
     
-    res = lo$gt
     mindim = lo$mindim
     
     if(!is.na(filename)){
@@ -532,6 +593,10 @@ heatmap_motor = function(matrix,
                            gaps_col = gaps_col, 
                            gaps_row = gaps_row, 
                            barplot_color = barplot_color,
+                           barplot_lim,
+                           barplot_label,
+                           barplot_legend = barplot_legend,
+                           barplot_legend_title = barplot_legend_title,
                            ...)
         grid.draw(gt)
         dev.off()
@@ -551,11 +616,16 @@ heatmap_motor = function(matrix,
     # Draw tree for the columns
     if(!is.na2(tree_col) & treeheight_col != 0){
         if (class(tree_col) == "numeric"){
-           elem = draw_barplot(tree_col, gaps_col, barplot_color)
+           elem = draw_barplot(tree_col, gaps_col, barplot_color, border_color, barplot_lim)
+           res = gtable_add_grob(res, elem, t = 2, l = 3, name = "col_tree")
+           
+           l = ifelse(is.null(labels_row), 5, 4)
+           elem = draw_barplot_axis(tree_col, barplot_label)
+           res = gtable_add_grob(res, elem, t = 2, l = l, clip = "off", name = "barplot_axis")
         }else{
            elem = draw_dendrogram(tree_col, gaps_col, horizontal = T)
+           res = gtable_add_grob(res, elem, t = 2, l = 3, name = "col_tree")
         }
-        res = gtable_add_grob(res, elem, t = 2, l = 3, name = "col_tree")
     }
     
     # Draw tree for the rows
@@ -613,7 +683,16 @@ heatmap_motor = function(matrix,
     # Draw annotation legend
     annotation = c(annotation_col[length(annotation_col):1], annotation_row[length(annotation_row):1])
     annotation = annotation[unlist(lapply(annotation, function(x) !is.na2(x)))]
-    
+    if (!is.null(barplot_legend)){
+       if (length(annotation) == 0){
+          annotation <- list()
+       }
+       annotation[[barplot_legend_title]] <- barplot_legend
+       if (length(annotation) > 1){
+          annotation <- annotation[c(length(annotation),1:(length(annotation)-1))]
+       }
+    }
+
     if(length(annotation) > 0 & annotation_legend){
         elem = draw_annotation_legend(annotation, annotation_colors, border_color, fontsize = fontsize, ...)
         
@@ -624,11 +703,9 @@ heatmap_motor = function(matrix,
     # Draw legend
     if(!is.na2(legend)){
         elem = draw_legend(color, breaks, legend, fontsize = fontsize, ...)
-        
         t = ifelse(is.null(labels_row), 4, 3)
         res = gtable_add_grob(res, elem, t = t, l = 5, b = 5, clip = "off", name = "legend")
     }
-    
     return(res)
 }
 
@@ -1045,8 +1122,30 @@ pheatmap = function(mat,
                     silent = FALSE, 
                     na_col = "#DDDDDD",
                     barplot_color = '#DDDDDD',
-                    barplot_decreasing_order = NA, ...){
-    
+                    barplot_height = 30,
+                    barplot_lim = NA,
+                    barplot_label = NA,
+                    barplot_decreasing_order = NA,
+                    barplot_legend = NULL,
+                    barplot_legend_title = 'Barplot',
+                    ...){
+   
+   #if color is a list check if all indices are hit and all the color scales have the same length
+   if (class(color) == 'list'){
+      if (!all(sapply(color,function(x)all(c('index','color') %in% names(x))))){
+         stop('If multiple color scales are specified, each list element needs to have "index" and "color" fields specified.')
+      }
+      col_len <- length(color[[1]]$color)
+      if (!all(sapply(color,function(x)length(x$color)) == col_len)){
+         stop('Currently only multiple color scales of the same lengths are allowed')
+      }
+      if (!all(sort(unlist(lapply(color,function(x)x$index))) == 1:nrow(mat))){
+         stop('There needs to be an index for each row specified')
+      }
+   } else {
+      col_len <- length(color)
+   }
+   
     # Set labels
     if(is.null(labels_row)){
         labels_row = rownames(mat)
@@ -1060,7 +1159,7 @@ pheatmap = function(mat,
     if(scale != "none"){
         mat = scale_mat(mat, scale)
         if(is.na2(breaks)){
-            breaks = generate_breaks(mat, length(color), center = T)
+            breaks = generate_breaks(mat, col_len, center = T)
         }
     }
     
@@ -1124,7 +1223,36 @@ pheatmap = function(mat,
         treeheight_row = 0
     }
     
-    if((class(cluster_cols) == "hclust") || cluster_cols){
+    if (class(cluster_cols) == 'numeric'){
+        stopifnot(length(cluster_cols) == ncol(mat))
+        
+        #if only a single color was used make a color vector out of it
+        if (length(barplot_color) == 1){
+           barplot_color <- rep(barplot_color, length(cluster_cols))
+        }
+       
+        #if ordering was requested
+        if (!is.na(barplot_decreasing_order)){
+            ord <- order(cluster_cols, decreasing = T)
+            mat = mat[, ord, drop = FALSE]
+            fmat = fmat[, ord, drop = FALSE]
+            labels_col = labels_col[ord]
+            cluster_cols = cluster_cols[ord]
+            barplot_color = barplot_color[ord]
+        }
+        
+        tree_col <- cluster_cols
+        treeheight_col <- barplot_height
+        
+        #fixing the limits for the barplot
+        if (is.na(barplot_lim)){
+            barplot_lim <- range(cluster_cols, na.rm = T) * 1.05
+            if (barplot_lim[1] >= 0){
+                barplot_lim[1] <- 0
+            }
+        }
+        
+    } else if((class(cluster_cols) == "hclust") || cluster_cols){
         if(class(cluster_cols) == "hclust"){
             tree_col = cluster_cols
         } else {
@@ -1141,23 +1269,7 @@ pheatmap = function(mat,
             gaps_col = NULL
         }
     #this is where we add the barplot
-    } else if (class(cluster_cols) == 'numeric'){
-       stopifnot(length(cluster_cols) != ncol(mat))
-       #if ordering was requested
-       if (!is.na(barplot_decreasing_order)){
-          ord <- order(cluster_cols, decreasing = T)
-          mat = mat[, ord, drop = FALSE]
-          fmat = fmat[, ord, drop = FALSE]
-          labels_col = labels_col[barplot_decreasing_order]
-       }
-       
-       tree_col <- cluster_cols
-       treeheight_col <- 30
-       if (length(barplot_color) == 1){
-          barplot_color <- rep(barplot_color, length(cluster_cols))
-       }
-       
-    }else{
+    } else {
         tree_col = NA
         treeheight_col = 0
     }
@@ -1171,9 +1283,8 @@ pheatmap = function(mat,
         }
     }
     
-    
     if(is.na2(breaks)){
-        breaks = generate_breaks(as.vector(mat), length(color))
+        breaks = generate_breaks(as.vector(mat), col_len)
     }
     if (legend & is.na2(legend_breaks)) {
         legend = grid.pretty(range(as.vector(breaks)))
@@ -1193,8 +1304,23 @@ pheatmap = function(mat,
     else {
         legend = NA
     }
-    mat = scale_colours(mat, col = color, breaks = breaks, na_col = na_col)
     
+    if (class(color) == 'list'){
+       new_mat <- matrix(NA, nrow = nrow(mat), ncol = ncol(mat))
+       rownames(new_mat) <- rownames(mat)
+       colnames(new_mat) <- colnames(mat)
+       for (idx in 1:length(color)){
+          new_mat[color[[idx]]$index,] <- scale_colours(mat[color[[idx]]$index,], 
+                                                        col = color[[idx]]$color, 
+                                                        breaks = breaks, 
+                                                        na_col = na_col)
+       }    
+       mat <- new_mat
+       
+    } else {
+       mat = scale_colours(mat, col = color, breaks = breaks, na_col = na_col)
+    }
+   
     # Preparing annotations
     if(is.na2(annotation_col) & !is.na2(annotation)){
         annotation_col = annotation
@@ -1217,6 +1343,13 @@ pheatmap = function(mat,
         annotation_colors = NA
     }
     
+    if (!is.null(barplot_legend)){
+        if (length(annotation_colors) == 1 && is.na(annotation_colors)){
+           annotation_colors <- list()
+        }
+        annotation_colors[[barplot_legend_title]] <- barplot_legend
+    }
+
     if(!show_rownames){
         labels_row = NULL
     }
@@ -1258,6 +1391,10 @@ pheatmap = function(mat,
                        labels_row = labels_row, 
                        labels_col = labels_col,
                        barplot_color = barplot_color,
+                       barplot_lim = barplot_lim,
+                       barplot_label = barplot_label,
+                       barplot_legend = barplot_legend,
+                       barplot_legend_title = barplot_legend_title,
                        ...)
     
     if(is.na(filename) & !silent){

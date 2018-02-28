@@ -56,20 +56,32 @@ names(treatment) <- levels(as.factor(col_annot$treatment))
 annot_colors <- list(treatment=treatment,
                      BOR=BOR)
 
-
 scores <- gsva(assays(screening)$final, gene_sets)[1,]
 
 
-par(mfrow=c(2,1))
-barplot(scores)
+color <- list()
+color$Gene_Expression <- list(index = 1:14,
+                    color = brewer.pal(11, "RdBu")[11:1])
+color$IHC <- list(index = 15:40,
+                    color = brewer.pal(11, "PuOr")[11:1])
+color$Pathways <- list(index = 41:nrow(mat),
+                    color = brewer.pal(11, "RdYlGn")[11:1])
+
+
+require(scales)
+source('../R/pheatmap.r')
 pheatmap(mat,
-         main = 'Burstein subtypes',
+         main = 'Sample',
          scale = 'row',
-         color = brewer.pal(11, "RdBu")[11:1],
+         color = color,
          cluster_rows = FALSE,
          annotation_col = col_annot,
          annotation_colors = annot_colors,
-         cluster_cols = hc01.col,
+         cluster_cols = scores,
+         barplot_decreasing_order = T,
+         barplot_label = 'GSVA',
+         barplot_color = annot_colors$BOR[col_annot$BOR],
+         barplot_legend = annot_colors$BOR, 
          gaps_row = gaps,
          gaps_col = c(8,16,24),
          fontsize=8)
